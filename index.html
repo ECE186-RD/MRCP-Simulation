@@ -1,0 +1,147 @@
+<html>
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+        <link rel="stylesheet" type="text/css" href="styles.css">
+    </head>
+    <body>
+        <script src="three.min.js"></script>
+        <script src="OrbitControls.js"></script>
+        <script src="TransformControls.js"></script>
+        <script src="mrcp_node.js"></script>
+        <script>
+            var scene = new THREE.Scene();
+            var camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight);
+            camera.lookAt(0,0,0);
+            camera.position.y = 30;
+            camera.target = null;
+            camera.rotateOnAxis(new THREE.Vector3(0,1,0), 180 );
+
+            var renderer = new THREE.WebGLRenderer({antialias: true});
+            var playing = true;
+            renderer.setSize(window.innerWidth, window.innerHeight)
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.setClearColor(0xfffffff);
+
+            document.body.append(renderer.domElement);
+
+            var controls = new THREE.OrbitControls( camera, renderer.domElement );
+            controls.maxPolarAngle = Math.PI/2.1; 
+
+            transform_control = new THREE.TransformControls( camera, renderer.domElement );
+            transform_control.setTranslationSnap(1);
+            transform_control.addEventListener( 'dragging-changed', function ( event ) {
+                controls.enabled = ! event.value;
+            } );
+            scene.add(transform_control);
+
+            var directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            var shadow_cutoff = 100;
+            directionalLight.shadow.camera.top = shadow_cutoff;
+            directionalLight.shadow.camera.bottom = -shadow_cutoff;
+            directionalLight.shadow.camera.right = shadow_cutoff;
+            directionalLight.shadow.camera.left = -shadow_cutoff;
+            directionalLight.position.x = 1;
+            directionalLight.position.y = 3;
+            directionalLight.position.z = -1;
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 16384/2;
+            directionalLight.shadow.mapSize.height = directionalLight.shadow.mapSize.width;
+            scene.add(directionalLight);
+
+            var ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+
+            var grid = new THREE.GridHelper(200, 200);
+            grid.position.set(0,0.55,0);
+            scene.add(grid);
+
+            var geometry = new THREE.BoxGeometry(200,1,200);
+            var material = new THREE.MeshPhongMaterial({color: 0xffffff});            
+            var floor = new THREE.Mesh(geometry, material);
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            var mrcp_phone = new MRCPNode(scene, renderer, new THREE.Vector3(4, 1, 5), 0xe86464);
+            var transformables = [mrcp_phone.mesh];
+
+            var mrcp_devices = [];
+            var reverse = false;
+            var positions = [new THREE.Vector3(0,1,2), new THREE.Vector3(6,1,2), new THREE.Vector3(3,1,7)];
+            for(var i=0;i<3;i++){
+                var mrcp_device = new MRCPNode(scene, renderer, positions[i]);
+                if(reverse){
+                    mrcp_phone.generateDistanceMesh(mrcp_device, 2);
+                }else{
+                    //mrcp_device.generateDistanceMesh(mrcp_phone, 1);
+                    mrcp_device.generateDistanceMesh(mrcp_phone, 2);
+                //mrcp_device.generateDistanceMesh(mrcp_phone, 3, 0x3cc0de);
+                }
+                mrcp_devices[mrcp_devices.length] = mrcp_device;
+                console.log("r"+(i+1)+": "+mrcp_device.mesh.position.distanceTo(mrcp_phone.mesh.position)+", x"+(i+1)+": "+mrcp_device.mesh.position.x+", y"+(i+1)+": "+mrcp_device.mesh.position.z);
+                transformables[transformables.length] = mrcp_device.mesh;
+                if(i > 0){
+                    mrcp_device.generateDistanceMesh(mrcp_devices[i-1], 1);
+                }
+                if(i > 1){
+                    mrcp_device.generateDistanceMesh(mrcp_devices[0], 1);
+                }
+            }
+            mrcp_phone.trilaterate();
+
+            var previous_time = 0;
+
+            var animate = function(time){
+                const delta = time - previous_time;
+                if(delta > 5){
+                    for(var i=0;i<mrcp_devices.length;i++){
+                    mrcp_devices[i].render();
+                    }
+                    previous_time = time;
+                }
+                mrcp_phone.render();
+                controls.update();
+                renderer.render(scene, camera);
+                requestAnimationFrame(animate);
+            }
+
+            animate();
+
+            document.addEventListener("keydown", function(event){
+                var keyCode = event.which;
+                if (keyCode == 87) {
+                    mrcp_phone.trilaterate();
+                    if(playing){
+                        playing = false;
+                    }else{
+                        playing = true;
+                    }
+                }
+            }, false);
+
+            var raycaster = new THREE.Raycaster();
+var mouse = new THREE.Vector2();
+
+document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+
+function onDocumentMouseDown( event ) {
+
+    event.preventDefault();
+
+    mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+    mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+    raycaster.setFromCamera( mouse, camera );
+
+    var intersects = raycaster.intersectObjects(transformables); 
+
+    if ( intersects.length > 0) {
+        console.log(intersects[0]);
+        transform_control.attach(intersects[0].object);
+
+    }
+
+}
+        </script>
+    </body>
+</html>
